@@ -11,15 +11,15 @@ int main() {
     rs2::pipeline p;
     rs2::config cfg;
 
+    std::cout << "Enabling video stream..." << std::endl;
     // For right now, turn only one of the infrared cameras
     // cfg.enable_stream(RS2_STREAM_GYRO);
     // cfg.enable_stream(RS2_STREAM_ACCEL);
-    // cfg.enable_stream(RS2_STREAM_COLOR, 1280, 720, RS2_FORMAT_BGR8, 30);
+    cfg.enable_stream(RS2_STREAM_COLOR, 1920, 1080, RS2_FORMAT_BGR8, 30);
     // cfg.enable_stream(RS2_DEPTH_SENSOR, RS2_STREAM_DEPTH, 640, 480, RS2_FORMAT_Z16, 30);
-    std::cout << "Enabling infrared streams..." << std::endl;
     // 0 is left, 1 is right, error if both enabled
     //cfg.enable_stream(RS2_STREAM_INFRARED, 0, 1280, 800, RS2_FORMAT_Y8, 30);
-    cfg.enable_stream(RS2_STREAM_INFRARED, 1, 1280, 800, RS2_FORMAT_Y8, 30);
+    //cfg.enable_stream(RS2_STREAM_INFRARED, 1, 1280, 800, RS2_FORMAT_Y8, 30);
 
     auto profile = p.start(cfg);
     auto dev = profile.get_device();
@@ -30,9 +30,9 @@ int main() {
     depth_sensor.set_option(RS2_OPTION_EMITTER_ENABLED, 0);    
 
     // Get the camera intrinsics
-    auto right_stream = profile.get_stream(RS2_STREAM_INFRARED, 1)
+    auto stream = profile.get_stream(RS2_STREAM_COLOR)
                                 .as<rs2::video_stream_profile>();
-    rs2_intrinsics intrinsics = right_stream.get_intrinsics();
+    rs2_intrinsics intrinsics = stream.get_intrinsics();
     std::cout << "Right IR Camera Intrinsics: " << std::endl;
     std::cout << "  Width: " << intrinsics.width << std::endl;
     std::cout << "  Height: " << intrinsics.height << std::endl;
@@ -75,52 +75,49 @@ int main() {
     
     while (true) {
         rs2::frameset frames = p.wait_for_frames();
-        rs2::video_frame right_ir = frames.get_infrared_frame(1);
-        if (!right_ir) continue;
-
-        // Calibrate the image
-        cv::Mat right_undistorted;
-        cv::Mat right_ir_mat(cv::Size(right_ir.get_width(), right_ir.get_height()), CV_8UC1, (void*)right_ir.get_data(), cv::Mat::AUTO_STEP);
-        cv::remap(right_ir_mat, right_undistorted, map1, map2, cv::INTER_LINEAR);
-
-        // Detect AprilTags
-        image_u8_t im = { .width = right_undistorted.cols,
-                          .height = right_undistorted.rows,
-                          .stride = right_undistorted.cols,
-                          .buf = right_undistorted.data
-                        };
+        rs2::video_frame color = frames.get_color_frame();
+        if (!color) continue;
+    
+        cv::Mat color_mat(cv::Size(color.get_width(), color.get_height()), CV_8UC3, (void*)color.get_data(), cv::Mat::AUTO_STEP);
+        cv::Mat gray_mat;
+        cv::cvtColor(color_mat, gray_mat, cv::COLOR_RGB2GRAY);
+    
+        cv::Mat undistorted;
+        cv::remap(gray_mat, undistorted, map1, map2, cv::INTER_LINEAR);
+    
+        image_u8_t im = {
+            .width = undistorted.cols,
+            .height = undistorted.rows,
+            .stride = (int)undistorted.step,
+            .buf = undistorted.data
+        };
+    
         zarray_t *detections = apriltag_detector_detect(td, &im);
-
+    
+        cv::Scalar blue(255,0,0), green(0,255,0);
         for (int i = 0; i < zarray_size(detections); i++) {
             apriltag_detection_t *det;
             zarray_get(detections, i, &det);
-
-            // Draw detection on the image
-            cv::line(right_undistorted, cv::Point(det->p[0][0], det->p[0][1]),
-                                         cv::Point(det->p[1][0], det->p[1][1]),
-                                         cv::Scalar(255, 0, 0), 2);
-            cv::line(right_undistorted, cv::Point(det->p[1][0], det->p[1][1]),
-                                         cv::Point(det->p[2][0], det->p[2][1]),
-                                         cv::Scalar(255, 0, 0), 2);
-            cv::line(right_undistorted, cv::Point(det->p[2][0], det->p[2][1]),
-                                         cv::Point(det->p[3][0], det->p[3][1]),
-                                         cv::Scalar(255, 0, 0), 2);
-            cv::line(right_undistorted, cv::Point(det->p[3][0], det->p[3][1]),
-                                         cv::Point(det->p[0][0], det->p[0][1]),
-                                         cv::Scalar(255, 0, 0), 2);
-
-            // Draw tag ID
-            cv::putText(right_undistorted, std::to_string(det->id),
+    
+            for (int j = 0; j < 4; j++) {
+                int k = (j+1)%4;
+                cv::line(undistorted,
+                         cv::Point(det->p[j][0], det->p[j][1]),
+                         cv::Point(det->p[k][0], det->p[k][1]),
+                         blue, 2);
+            }
+    
+            cv::putText(undistorted, std::to_string(det->id),
                         cv::Point(det->c[0], det->c[1]),
-                        cv::FONT_HERSHEY_SIMPLEX, 1.0,
-                        cv::Scalar(0, 255, 0), 2);
+                        cv::FONT_HERSHEY_SIMPLEX, 1.0, green, 2);
         }
         apriltag_detections_destroy(detections);
-
-        cv::imshow("Right IR", right_undistorted);
-
-        if (cv::waitKey(1) == 27) break; // Exit on ESC key
+    
+        cv::imshow("Color", undistorted);
+    
+        if (cv::waitKey(1) == 27) break;
     }
+    
 
     return 0;
 }

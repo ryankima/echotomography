@@ -15,7 +15,7 @@ int main() {
     // For right now, turn only one of the infrared cameras
     // cfg.enable_stream(RS2_STREAM_GYRO);
     // cfg.enable_stream(RS2_STREAM_ACCEL);
-    cfg.enable_stream(RS2_STREAM_COLOR, 1920, 1080, RS2_FORMAT_BGR8, 30);
+    cfg.enable_stream(RS2_STREAM_COLOR, 1920, 1080, RS2_FORMAT_RGB8, 30);
     // cfg.enable_stream(RS2_DEPTH_SENSOR, RS2_STREAM_DEPTH, 640, 480, RS2_FORMAT_Z16, 30);
     // 0 is left, 1 is right, error if both enabled
     //cfg.enable_stream(RS2_STREAM_INFRARED, 0, 1280, 800, RS2_FORMAT_Y8, 30);
@@ -70,19 +70,20 @@ int main() {
 
     td->quad_decimate = 1.0;
     td->quad_sigma = 0.0;
-    td->nthreads = 1;
+    td->nthreads = 4;
     td->refine_edges = 1;
+
+    cv::Mat gray_mat, undistorted, color_mat;
     
     while (true) {
         rs2::frameset frames = p.wait_for_frames();
         rs2::video_frame color = frames.get_color_frame();
         if (!color) continue;
     
-        cv::Mat color_mat(cv::Size(color.get_width(), color.get_height()), CV_8UC3, (void*)color.get_data(), cv::Mat::AUTO_STEP);
-        cv::Mat gray_mat;
+        color_mat = cv::Mat(cv::Size(color.get_width(), color.get_height()), CV_8UC3, (void*)color.get_data(), cv::Mat::AUTO_STEP);
+        
         cv::cvtColor(color_mat, gray_mat, cv::COLOR_RGB2GRAY);
     
-        cv::Mat undistorted;
         cv::remap(gray_mat, undistorted, map1, map2, cv::INTER_LINEAR);
     
         image_u8_t im = {

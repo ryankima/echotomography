@@ -9,6 +9,7 @@ if (WIN32)
     set(OpenCV_DIR "C:/opencv/opencv/build")
     set(realsense2_DIR "C:/librealsense/install/lib/cmake/realsense2")
     set(APRILTAG_DIR "C:/apriltag/apriltag/install")
+    list(APPEND CMAKE_PREFIX_PATH "C:/vcpkg/installed/x64-windows")
     include_directories(${APRILTAG_DIR}/include)
     link_directories(${APRILTAG_DIR}/lib)
 endif()
@@ -23,6 +24,7 @@ endif()
 # this is fine if you have a normalish linux install
 find_package(OpenCV REQUIRED)
 find_package(realsense2 REQUIRED)
+find_package(Eigen3 CONFIG REQUIRED)
 
 add_executable(position_detector
     src/main.cpp
@@ -32,4 +34,5 @@ target_link_libraries(position_detector
     ${OpenCV_LIBS}
     realsense2::realsense2
     apriltag
+    Eigen3::Eigen
 )

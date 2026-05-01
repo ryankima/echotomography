@@ -3,6 +3,8 @@
 #include <apriltag/apriltag_pose.h>
 
 #include <opencv2/opencv.hpp>
+#include <opencv2/core/quaternion.hpp>
+
 #include <librealsense2/rs.hpp>
 
 #include <algorithm>
